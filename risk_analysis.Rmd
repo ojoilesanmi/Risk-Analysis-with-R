@@ -1,7 +1,133 @@
 ---
 title: "Risk_Analysis"
-author: "Ojo Ilesanmi"
+author: "Ojo Ilesanmi and Somto Momah"
 date: "6/9/2020"
 output: html_document
 ---
 
+#load the data
+```{r} 
+loan_data <- read.csv("train.csv")
+```
+
+```{r}
+View(loan_data)
+```
+
+```{r}
+summary(loan_data)
+```
+```{r}
+str(loan_data)
+```
+```{r}
+sum(is.na(loan_data))
+```
+```{r}
+#impute missing value
+loan_data$LoanAmount <-  ifelse(is.na(loan_data$LoanAmount),
+                    ave(loan_data$LoanAmount, FUN = function(x) mean(x, na.rm = TRUE)),
+                   loan_data$LoanAmount)
+
+loan_data$Dependents <- floor(ifelse(is.na(loan_data$Dependents),
+                    ave(loan_data$Dependents, FUN = function(x) mean(x, na.rm = TRUE)),
+                   loan_data$Dependents))
+
+Mode = function(x){
+    ta = table(x)
+    tam = max(ta)
+    if (all(ta == tam))
+         mod = NA
+    else
+         if(is.numeric(x))
+    mod = as.numeric(names(ta)[ta == tam])
+    else
+         mod = names(ta)[ta == tam]
+    return(mod)
+}
+
+credit_history_mode <- Mode(loan_data$Credit_History)
+loan_data$Credit_History <- ifelse(is.na(loan_data$Credit_History),credit_history_mode,loan_data$Credit_History)
+
+loan_amount_term_mode <- Mode(loan_data$Loan_Amount_Term)
+loan_data$Loan_Amount_Term <- ifelse(is.na(loan_data$Loan_Amount_Term),loan_amount_term_mode,loan_data$Loan_Amount_Term)
+```
+
+```{r}
+#convert dollars/year to dollars/month
+loan_data$ApplicantIncome <- (loan_data$ApplicantIncome/12)
+loan_data$CoapplicantIncome <-  (loan_data$CoapplicantIncome/12)
+
+#converting term from weeks to month
+loan_data$Loan_Amount_Term <- floor(loan_data$Loan_Amount_Term/4.348125)
+```
+
+```{r}
+#drop ID column
+loan_data <-loan_data[,-1]
+```
+
+
+
+#EDA
+```{r}
+plots <- (loan_data[,c(1,2,3,4,5,10,11)] %>%
+  gather() %>%
+  ggplot(aes(value)) + 
+  facet_wrap(~ key, scales = 'free') +
+  geom_bar() +
+  theme(strip.text = element_text(size=5)))
+
+plots
+```
+
+
+```{r}
+#corr plot
+loan_data_cor <- cor(loan_data[,c(6,7,8,9,10)])
+
+corrplot(loan_data_cor)
+```
+
+```{r}
+#scatter plot of corr features
+ggplot(loan_data,aes(x=ApplicantIncome,y=LoanAmount))+
+         geom_point() +
+  labs(title = 'Relationship between Loan Amount and Applicant Income')
+```
+
+```{r}
+#convert categorical variables to numeric
+dummy <- dummyVars('~.', data = loan_data, sep = '.')
+transform <- data.frame(predict(dummy, newdata = loan_data))
+view(transform)
+
+transform_2 <- transform[,-c(1,2,4,5,9,10,11,18,21)]
+view(transform_2)
+
+transform_3 <- transform_2 %>% rename(
+  Gender = Gender.Male,
+  Married = Married.Yes,
+  Education = Education.Graduate,
+  Self_Employed = Self_Employed.Yes,
+  Loan_Status = Loan_Status.Y
+    )
+    
+View(transform_3)
+
+#scale and log transform
+transformed_variables <- c('ApplicantIncome','CoapplicantIncome','LoanAmount','Loan_Amount_Term')
+
+#data with 1 year tenure
+loan_data_tidy <- transform_3 %>%
+  mutate_at(vars(transformed_variables), funs(log(1 + .))) %>%
+  mutate_at(c(1:13), funs(c(scale(.))))
+
+View(loan_data_tidy)
+
+
+#new corr plot
+loan_data_cor2 <- cor(loan_data_tidy)
+
+corrplot(loan_data_cor2)
+```
