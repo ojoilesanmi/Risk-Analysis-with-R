@@ -164,9 +164,16 @@ logistic_regression<- train(form=Loan_Status~., data=trainingdata,method="glm", 
 ```
 
 ```{r}
-logistic_regression_prediction<-predict(logistic_regression,testdata,type="raw")
-confusionMatrix(logistic_regression_prediction, testdata$Loan_Status)
+logistic_regression_prediction<-predict(logistic_regression,transform_5,type="raw")
+logistic_regression_confusion_matrix<-confusionMatrix(logistic_regression_prediction, transform_5$Loan_Status)
 ```
+
+```{r}
+#result <- confusionMatrix(prediction, truth)
+precision <- logistic_regression_confusion_matrix$byClass['Pos Pred Value']    
+recall <- logistic_regression_confusion_matrix$byClass['Sensitivity']
+```
+
 ```{r}
 svm<- train(form=Loan_Status~., data=trainingdata, method="svmLinear", trControl=cross_validation, na.action=na.roughfix )
 ```
@@ -198,4 +205,82 @@ xgb_model <-train(Loan_Status ~ .,data = trainingdata, method="xgbTree",trContro
 ```{r}
 predxgb<-predict(xgb_model,testdata,type="raw")
 confusionMatrix(predxgb, testdata$Loan_Status)
+```
+
+```{r}
+test_loan <- read.csv('C:/Users/USER/Documents/Risk Analysis/train_loan.csv')
+```
+
+```{r}
+test_loan$Loan_Amount_Term<- floor(ifelse(is.na(test_loan$Loan_Amount_Term), mean(test_loan$Loan_Amount_Term, na.rm=TRUE), test_loan$Loan_Amount_Term))
+```
+
+```{r}
+
+Mode = function(x){
+    ta = table(x)
+    tam = max(ta)
+    if (all(ta == tam))
+         mod = NA
+    else
+         if(is.numeric(x))
+    mod = as.numeric(names(ta)[ta == tam])
+    else
+         mod = names(ta)[ta == tam]
+    return(mod)
+}
+
+Credit_History_mode <- Mode(test_loan$Credit_History)
+
+
+test_loan$Credit_History <- ifelse(is.na(test_loan$Credit_History),Credit_History_mode,test_loan$Credit_History)
+```
+
+```{r}
+test_loan$Dependents<- floor(ifelse(is.na(test_loan$Dependents), mean(test_loan$Dependents, na.rm=TRUE), test_loan$Dependents))
+```
+
+```{r}
+test_loan$LoanAmount<- floor(ifelse(is.na(test_loan$LoanAmount), mean(test_loan$LoanAmount, na.rm=TRUE), test_loan$LoanAmount))
+```
+
+```{r}
+test_loan$LoanAmount <- test_loan$LoanAmount * 410
+```
+
+```{r}
+test_loan$LoanAmount <- floor((test_loan$LoanAmount) / 12)
+```
+
+```{r}
+test_loan$Loan_ID <- NULL
+```
+
+```{r}
+dummy <- dummyVars('~.', data = test_loan, sep = '.')
+transform_1 <- data.frame(predict(dummy, newdata = test_loan))
+#view(transform)
+
+transform_4 <- transform_1[,-c(1,2,4,5,9,10,11,18,21)]
+#view(transform_2)
+
+transform_5 <- transform_4 %>% rename(
+  Gender = Gender.Male,
+  Married = Married.Yes,
+  Education = Education.Graduate,
+  Self_Employed = Self_Employed.Yes,
+  Loan_Status = Loan_Status.Y
+    )
+    
+#View(transform_3)
+```
+
+```{r}
+transform_5$Loan_Status <- as.factor(transform_5$Loan_Status)
+transform_5$Dependents <- as.factor(transform_5$Dependents)
+transform_5$Married <- as.factor(transform_5$Married)
+transform_5$Education <- as.factor(transform_5$Education)
+transform_5$Gender <- as.factor(transform_5$Gender)
+transform_5$Self_Employed <- as.factor(transform_5$Self_Employed)
+transform_5$Credit_History <- as.factor(transform_5$Credit_History)
 ```
