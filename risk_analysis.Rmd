@@ -1,38 +1,41 @@
 ---
 title: "Risk_Analysis"
-author: "Ojo Ilesanmi and Somto Momah"
+author: "Ojo Ilesanmi and Somto Mommah"
 date: "6/9/2020"
 output: html_document
 ---
 
-#load the data
-```{r} 
-loan_data <- read.csv("train.csv")
+#Libraries
+```{r}
+library('tidyverse')
+library('DMwR')
+library('randomForest')
+library('rpart')
+library('cluster')
+library('recipes')
+library('gridExtra')
+library('caret')
+library('xgboost')
 ```
 
 ```{r}
-View(loan_data)
+credit_data <- read.csv('C:/Users/USER/Documents/Risk Analysis/train_loan.csv')
 ```
 
 ```{r}
-summary(loan_data)
+str(credit_data)
 ```
-```{r}
-str(loan_data)
-```
-```{r}
-sum(is.na(loan_data))
-```
-```{r}
-#impute missing value
-loan_data$LoanAmount <-  ifelse(is.na(loan_data$LoanAmount),
-                    ave(loan_data$LoanAmount, FUN = function(x) mean(x, na.rm = TRUE)),
-                   loan_data$LoanAmount)
 
-loan_data$Dependents <- floor(ifelse(is.na(loan_data$Dependents),
-                    ave(loan_data$Dependents, FUN = function(x) mean(x, na.rm = TRUE)),
-                   loan_data$Dependents))
+```{r}
+sapply(credit_data, function(x) sum(is.na(x)))
+```
+#Replacing missing values in Loan_Amount_Term with the Mean
+```{r}
+credit_data$Loan_Amount_Term<- floor(ifelse(is.na(credit_data$Loan_Amount_Term), mean(credit_data$Loan_Amount_Term, na.rm=TRUE), credit_data$Loan_Amount_Term))
+```
 
+#Replacing missing values in credit history with mode
+```{r}
 Mode = function(x){
     ta = table(x)
     tam = max(ta)
@@ -46,60 +49,86 @@ Mode = function(x){
     return(mod)
 }
 
-credit_history_mode <- Mode(loan_data$Credit_History)
-loan_data$Credit_History <- ifelse(is.na(loan_data$Credit_History),credit_history_mode,loan_data$Credit_History)
+Credit_History_mode <- Mode(credit_data$Credit_History)
 
-loan_amount_term_mode <- Mode(loan_data$Loan_Amount_Term)
-loan_data$Loan_Amount_Term <- ifelse(is.na(loan_data$Loan_Amount_Term),loan_amount_term_mode,loan_data$Loan_Amount_Term)
+
+credit_data$Credit_History <- ifelse(is.na(credit_data$Credit_History),Credit_History_mode,credit_data$Credit_History)
+
+```
+#Replacing missing values in Dependents with mean
+```{r}
+credit_data$Dependents<- floor(ifelse(is.na(credit_data$Dependents), mean(credit_data$Dependents, na.rm=TRUE), credit_data$Dependents))
+```
+
+#Replacing missing values in Loan Amount with mean
+```{r}
+credit_data$LoanAmount<- floor(ifelse(is.na(credit_data$LoanAmount), mean(credit_data$LoanAmount, na.rm=TRUE), credit_data$LoanAmount))
+```
+
+#Converting Dollars to Naira in LoanAmount
+```{r}
+credit_data$LoanAmount <- credit_data$LoanAmount * 410
+```
+
+#converting LoanAmount from Yearly basis to Monthly basis
+```{r}
+credit_data$LoanAmount <- floor((credit_data$LoanAmount) / 12)
+```
+#Dropping column #Loan_ID it won't be needed in our analysis and prediction
+```{r}
+credit_data$Loan_ID <- NULL
 ```
 
 ```{r}
-#convert dollars/year to dollars/month
-loan_data$ApplicantIncome <- (loan_data$ApplicantIncome/12)
-loan_data$CoapplicantIncome <-  (loan_data$CoapplicantIncome/12)
+p1 <- ggplot(credit_data, aes(x=Education)) + ggtitle("Educational Qualifications") + xlab("Education") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p2 <- ggplot(credit_data, aes(x=Married)) + ggtitle("Marital Status") + xlab("Marital Status") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p3 <- ggplot(credit_data, aes(x=Self_Employed)) + ggtitle("Employment Status ") + xlab("Self Employed or Not") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p4 <- ggplot(credit_data, aes(x=Gender)) + ggtitle("Gender") + xlab("Male") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
 
-#converting term from weeks to month
-loan_data$Loan_Amount_Term <- floor(loan_data$Loan_Amount_Term/4.348125)
+p5 <- ggplot(credit_data, aes(x=Dependents)) + ggtitle("Dependants") + xlab("Number of Dependants") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p6 <- ggplot(credit_data, aes(x=Credit_History)) + ggtitle("Credit History") + xlab("Credit History") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p7 <- ggplot(credit_data, aes(x=Property_Area)) + ggtitle("Location of Property") + xlab("Property Location") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, ncol=3)
+
 ```
 
 ```{r}
-#drop ID column
-loan_data <-loan_data[,-1]
-```
-
-
-
-#EDA
-```{r}
-plots <- (loan_data[,c(1,2,3,4,5,10,11)] %>%
-  gather() %>%
-  ggplot(aes(value)) + 
-  facet_wrap(~ key, scales = 'free') +
-  geom_bar() +
-  theme(strip.text = element_text(size=5)))
-
-plots
-```
-
-
-```{r}
-#corr plot
-loan_data_cor <- cor(loan_data[,c(6,7,8,9,10)])
-
-corrplot(loan_data_cor)
+creditdata_noimp<-knnImputation(credit_data, k = 5, scale = T, meth = "weighAvg",
+distData = NULL)
+nrow(creditdata_noimp)
 ```
 
 ```{r}
-#scatter plot of corr features
-ggplot(loan_data,aes(x=ApplicantIncome,y=LoanAmount))+
-         geom_point() +
-  labs(title = 'Relationship between Loan Amount and Applicant Income')
+p8 <- ggplot(credit_data, aes(x= ApplicantIncome)) + ggtitle("Applicant's Income") + xlab("Applicant Income") + 
+  geom_histogram() + theme_minimal()
+p9 <- ggplot(credit_data, aes(x=LoanAmount)) + ggtitle("Loan Amount") + xlab("Loan Amount") + 
+  geom_histogram() + theme_minimal()
+p10 <- ggplot(credit_data, aes(x=Loan_Amount_Term)) + ggtitle("Loan Amount Term") + xlab("Loan Amount Term") + 
+  geom_histogram() + theme_minimal()
+p11 <- ggplot(credit_data, aes(x=CoapplicantIncome)) + ggtitle("CoApplicant's Income") + xlab("CoApplicant's Income") + 
+  geom_histogram() + theme_minimal()
+grid.arrange(p8,p9, p10, p11)
+
+```
+#Splitting data for modelling (train and test)
+```{r}
+split<-sample(nrow(transform_3), round(nrow(transform_3)*0.8))
+trainingdata <-transform_3[split,]
+testdata <- transform_3[-split,]
+dim(trainingdata)
+dim(testdata)
 ```
 
 ```{r}
-#convert categorical variables to numeric
-dummy <- dummyVars('~.', data = loan_data, sep = '.')
-transform <- data.frame(predict(dummy, newdata = loan_data))
+dummy <- dummyVars('~.', data = credit_data, sep = '.')
+transform <- data.frame(predict(dummy, newdata = credit_data))
 view(transform)
 
 transform_2 <- transform[,-c(1,2,4,5,9,10,11,18,21)]
@@ -114,20 +143,59 @@ transform_3 <- transform_2 %>% rename(
     )
     
 View(transform_3)
+```
 
-#scale and log transform
-transformed_variables <- c('ApplicantIncome','CoapplicantIncome','LoanAmount','Loan_Amount_Term')
+```{r}
+transform_3$Loan_Status <- as.factor(transform_3$Loan_Status)
+transform_3$Dependents <- as.factor(transform_3$Dependents)
+transform_3$Married <- as.factor(transform_3$Married)
+transform_3$Education <- as.factor(transform_3$Education)
+transform_3$Gender <- as.factor(transform_3$Gender)
+transform_3$Self_Employed <- as.factor(transform_3$Self_Employed)
+transform_3$Credit_History <- as.factor(transform_3$Credit_History)
+```
 
-#data with 1 year tenure
-loan_data_tidy <- transform_3 %>%
-  mutate_at(vars(transformed_variables), funs(log(1 + .))) %>%
-  mutate_at(c(1:13), funs(c(scale(.))))
+```{r}
+cross_validation <- trainControl(method = "repeatedcv", repeats = 1,number = 3)
+```
 
-View(loan_data_tidy)
+```{r}
+logistic_regression<- train(form=Loan_Status~., data=trainingdata,method="glm", family="binomial",trControl=cross_validation)
+```
 
+```{r}
+logistic_regression_prediction<-predict(logistic_regression,testdata,type="raw")
+confusionMatrix(logistic_regression_prediction, testdata$Loan_Status)
+```
+```{r}
+svm<- train(form=Loan_Status~., data=trainingdata, method="svmLinear", trControl=cross_validation, na.action=na.roughfix )
+```
 
-#new corr plot
-loan_data_cor2 <- cor(loan_data_tidy)
+```{r}
+predsvm<-predict(svm,testdata,type="raw")
+confusionMatrix(predsvm, testdata$Loan_Status)
+```
 
-corrplot(loan_data_cor2)
+```{r}
+mtry <- sqrt(ncol(trainingdata))
+tunegrid <- expand.grid(.mtry=mtry)
+rf<- train(form=Loan_Status~., data=trainingdata,method="rf", metric="Accuracy",tuneGrid=tunegrid, trControl=cross_validation)
+```
+
+```{r}
+predrf<-predict(rf,testdata,type="raw")
+confusionMatrix(predrf, testdata$Loan_Status)
+```
+
+```{r}
+xgb.grid <- expand.grid(nrounds = 100,eta=0.3, gamma=0, max_depth=3, min_child_weight=1, subsample=1, colsample_bytree=1)
+```
+
+```{r}
+xgb_model <-train(Loan_Status ~ .,data = trainingdata, method="xgbTree",trControl=cross_validation, tuneGrid=xgb.grid,nthread =4)
+```
+
+```{r}
+predxgb<-predict(xgb_model,testdata,type="raw")
+confusionMatrix(predxgb, testdata$Loan_Status)
 ```
