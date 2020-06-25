@@ -1,0 +1,130 @@
+---
+title: "Risk Analysis"
+author: "Somto Momah and Ojo Ilesanmi"
+date: "6/21/2020"
+output: html_document
+---
+
+#Libraries
+```{r}
+library('tidyverse')
+library('DMwR')
+library('randomForest')
+library('rpart')
+library('cluster')
+library('recipes')
+library('gridExtra')
+library('caret')
+library('xgboost')
+library('recipes')
+```
+
+#load data
+```{r}
+data <- read.csv('loan.csv')
+
+View(data)
+```
+
+```{r}
+str(data)
+```
+```{r}
+summary(data)
+```
+```{r}
+sapply(data, function(x) sum(is.na(x)))
+```
+#dropping unwanted columns
+```{r}
+data$id <- NULL
+data$year <- NULL
+data$issue_d <- NULL
+data$final_d <- NULL
+```
+
+#EDA
+```{r}
+p1 <- ggplot(data, aes(x=home_ownership)) + ggtitle("Home Ownership") + xlab("Home Ownership") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p2 <- ggplot(data, aes(x=income_category)) + ggtitle("Income Category") + xlab("Income Category") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p3 <- ggplot(data, aes(x=term)) + ggtitle("Term") + xlab("Term of loan") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p4 <- ggplot(data, aes(x=purpose)) + ggtitle("Purpose") + xlab("Purpose") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+
+p5 <- ggplot(data, aes(x=application_type)) + ggtitle("Type of Application") + xlab("Application Type") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p6 <- ggplot(data, aes(x=interest_payments)) + ggtitle("Interest Payments") + xlab("Interest Payments") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p7 <- ggplot(data, aes(x=loan_condition)) + ggtitle("Loan Condition") + xlab("Condition of Loan") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, ncol=3)
+```
+```{r}
+p8 <- ggplot(data, aes(x= emp_length_int)) + ggtitle("Number of years of employment") + xlab("Applicant Years of Employment") + 
+  geom_histogram() + theme_minimal()
+p9 <- ggplot(data, aes(x=annual_inc)) + ggtitle("Applicant's Annual Income") + xlab("Annual Income") + 
+  geom_histogram() + theme_minimal()
+p10 <- ggplot(data, aes(x=loan_amount)) + ggtitle("Loan Amount") + xlab("Loan Amount") + 
+  geom_histogram() + theme_minimal()
+p11 <- ggplot(data, aes(x=interest_rate)) + ggtitle("Interest Rate") + xlab("Interest Rate") + 
+  geom_histogram() + theme_minimal()
+p12 <- ggplot(data, aes(x=dti)) + ggtitle("DTI") + xlab("DTI") + 
+  geom_histogram() + theme_minimal()
+p13 <- ggplot(data, aes(x=total_pymnt)) + ggtitle("Total Payment") + xlab("Total Payment") + 
+  geom_histogram() + theme_minimal()
+p14 <- ggplot(data, aes(x=total_rec_prncp)) + ggtitle("Total Principal") + xlab("Total Principal") + 
+  geom_histogram() + theme_minimal()
+p15 <- ggplot(data, aes(x=recoveries)) + ggtitle("Recoveries") + xlab("Recoveries") + 
+  geom_histogram() + theme_minimal()
+p16 <- ggplot(data, aes(x=installment)) + ggtitle("Installment") + xlab("Installment") + 
+  geom_histogram() + theme_minimal()
+grid.arrange(p8,p9,p10,p11,p12,p13,p14,p15,p16)
+```
+#Converting Dollars to Naira in all money related columns
+```{r}
+data$annual_inc <- data$annual_inc * 410
+data$loan_amount <- data$loan_amount * 410
+data$dti <- data$dti * 410
+data$total_pymnt <- data$total_pymnt * 410
+data$total_rec_prncp <-  data$total_rec_prncp * 410
+data$recoveries <-data$recoveries * 410
+data$installment <- data$installment * 410
+```
+
+#converting Annual income from Yearly basis to Monthly basis
+```{r}
+data$annual_inc <- floor((data$annual_inc) / 12)
+```
+#rename annual_inc to monthly_inc
+```{r}
+data <- data %>% rename(
+  monthly_inc = annual_inc
+)
+View(data)
+```
+
+```{r}
+# data %>% 
+#   select(monthly_inc, income_category, emp_length_int) %>% 
+#   filter(income_category == 'High')
+```
+
+#drop unwanted columns
+```{r}
+data <- data %>% 
+  select(-c(2,4,8,10,12,14,16,19))
+
+View(data)
+```
+
+#scale and log transform columns
+```{r}
+new_data <- data %>% 
+  mutate_at(c(1,5,7,18,21,22,23,24,25), funs(log(1 + .))) %>%
+ mutate_at(c(2:17), funs(c(scale(.))))
+View(new_data)
+```
+
